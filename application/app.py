@@ -15,6 +15,7 @@ def get_db_connection():
         dbname=os.environ.get("DB_NAME", "orderdb"),
         user=os.environ.get("DB_USER", "postgres"),
         password=os.environ["DB_PASSWORD"],
+        sslmode="require",
         row_factory=dict_row
     )
 
