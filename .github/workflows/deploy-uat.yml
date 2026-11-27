@@ -1,4 +1,5 @@
 
+
 name: Order API UAT Deployment
 
 on:
@@ -63,10 +64,13 @@ jobs:
             --name order-api-uat-20261127xyz \
             --startup-file "gunicorn --bind=0.0.0.0:8000 app:app"
 
-            - name: Deploy to Azure App Service
-            - name: Deploy to Azure App Service
-            uses: azure/webapps-deploy@v3
-            with:
-              app-name: order-api-uat-20261127xyz
-              package: ./application
-              startup-command: "gunicorn --bind=0.0.0.0:8000 app:app"
+      - name: Create deployment package
+        run: |
+          cd application
+          zip -r ../uat-deployment.zip app.py requirements.txt
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: order-api-uat-20261127xyz
+          package: uat-deployment.zip
