@@ -1,8 +1,11 @@
 
 
-name: Deploy Order API to Azure
+name: Order API CI/CD
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -10,8 +13,32 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  test:
+    name: Run Python Tests
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r application/requirements.txt
+
+      - name: Run automated tests
+        run: |
+          python -m pytest application/tests -v
+
+  deploy:
+    name: Deploy to Azure Dev
+    runs-on: ubuntu-latest
+    needs: test
 
     steps:
       - name: Checkout repository
@@ -45,5 +72,4 @@ jobs:
         with:
           app-name: order-api-dev-20261123xyz
           package: application
-
 
