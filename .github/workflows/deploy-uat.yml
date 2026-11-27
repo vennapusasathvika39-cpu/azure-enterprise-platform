@@ -1,5 +1,6 @@
 
 
+
 name: Order API UAT Deployment
 
 on:
@@ -21,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -29,8 +30,7 @@ jobs:
           pip install -r application/requirements.txt
 
       - name: Run automated tests
-        run: |
-          python -m pytest application/tests -v
+        run: python -m pytest application/tests -v
 
   deploy:
     name: Deploy to Azure UAT
@@ -48,29 +48,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Enable Oryx Build Automation
+      - name: Configure App Service
         run: |
           az webapp config appsettings set \
             --resource-group rg-order-uat \
             --name order-api-uat-20261127xyz \
-            --settings \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
-              ENABLE_ORYX_BUILD=true
+            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true ENABLE_ORYX_BUILD=true
 
-      - name: Configure App Service startup
-        run: |
           az webapp config set \
             --resource-group rg-order-uat \
             --name order-api-uat-20261127xyz \
             --startup-file "gunicorn --bind=0.0.0.0:8000 app:app"
 
-      - name: Create deployment package
-        run: |
-          cd application
-          zip -r ../uat-deployment.zip app.py requirements.txt
-
-      - name: Deploy to Azure App Service
+      - name: Deploy application
         uses: azure/webapps-deploy@v3
         with:
           app-name: order-api-uat-20261127xyz
-          package: uat-deployment.zip
+          package: ./application
+
