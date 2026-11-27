@@ -41,6 +41,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify application files
+        run: |
+          test -f application/app.py
+          test -f application/requirements.txt
+          echo "Application files verified"
+
+      - name: Create deployment package
+        run: |
+          cd application
+          zip -r ../uat-deployment.zip app.py requirements.txt
+
+      - name: Verify deployment package
+        run: |
+          unzip -l uat-deployment.zip
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -53,16 +68,18 @@ jobs:
           az webapp config appsettings set \
             --resource-group rg-order-uat \
             --name order-api-uat-20261127xyz \
-            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true ENABLE_ORYX_BUILD=true
+            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
 
           az webapp config set \
             --resource-group rg-order-uat \
             --name order-api-uat-20261127xyz \
-            --startup-file "gunicorn --bind=0.0.0.0:8000 app:app"
+            --startup-file "gunicorn --chdir /home/site/wwwroot --bind=0.0.0.0:8000 app:app"
 
-      - name: Deploy application
+      - name: Deploy to UAT
         uses: azure/webapps-deploy@v3
         with:
           app-name: order-api-uat-20261127xyz
-          package: ./application
+          package: uat-deployment.zip
+
+
 
