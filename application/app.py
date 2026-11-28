@@ -1,12 +1,42 @@
 
-from flask import Flask, request, jsonify
-from datetime import timezone
 import os
+import uuid
+
 import psycopg
 from psycopg.rows import dict_row
 
+from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
+
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient
+
+
+# --------------------------------------------------
+# Flask application
+# --------------------------------------------------
+
 app = Flask(__name__)
 
+
+# --------------------------------------------------
+# Azure Blob Storage configuration
+# --------------------------------------------------
+
+STORAGE_ACCOUNT_NAME = "storderuat2026xyz"
+CONTAINER_NAME = "order-data"
+
+credential = DefaultAzureCredential()
+
+blob_service_client = BlobServiceClient(
+    account_url=f"https://{STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
+    credential=credential
+)
+
+
+# --------------------------------------------------
+# PostgreSQL database connection
+# --------------------------------------------------
 
 def get_db_connection():
     return psycopg.connect(
@@ -19,6 +49,10 @@ def get_db_connection():
         row_factory=dict_row
     )
 
+
+# --------------------------------------------------
+# Home / Health check
+# --------------------------------------------------
 
 @app.route("/", methods=["GET"])
 def home():
@@ -36,11 +70,17 @@ def home():
 
     except psycopg.Error:
         app.logger.exception("Database health check failed")
+
         return jsonify({
             "message": "Order and Telemetry API",
             "status": "running",
             "database": "disconnected"
         }), 503
+
+
+# --------------------------------------------------
+# Create Order
+# --------------------------------------------------
 
 @app.route("/orders", methods=["POST"])
 def create_order():
@@ -57,10 +97,14 @@ def create_order():
 
     try:
         quantity = int(quantity)
+
         if quantity <= 0:
             raise ValueError()
+
     except (ValueError, TypeError):
-        return jsonify({"error": "quantity must be a positive integer"}), 400
+        return jsonify({
+            "error": "quantity must be a positive integer"
+        }), 400
 
     try:
         with get_db_connection() as conn:
@@ -75,6 +119,7 @@ def create_order():
                     """,
                     (customer_name, product, quantity)
                 )
+
                 order = cur.fetchone()
 
         return jsonify({
@@ -88,8 +133,15 @@ def create_order():
 
     except psycopg.Error:
         app.logger.exception("Database error while creating order")
-        return jsonify({"error": "Could not save order"}), 500
 
+        return jsonify({
+            "error": "Could not save order"
+        }), 500
+
+
+# --------------------------------------------------
+# Get Orders
+# --------------------------------------------------
 
 @app.route("/orders", methods=["GET"])
 def get_orders():
@@ -104,6 +156,7 @@ def get_orders():
                     ORDER BY id DESC
                     """
                 )
+
                 rows = cur.fetchall()
 
         orders = [{
@@ -115,12 +168,19 @@ def get_orders():
             "created_at": row["created_at"].isoformat()
         } for row in rows]
 
-        return jsonify(orders)
+        return jsonify(orders), 200
 
     except psycopg.Error:
         app.logger.exception("Database error while retrieving orders")
-        return jsonify({"error": "Could not retrieve orders"}), 500
 
+        return jsonify({
+            "error": "Could not retrieve orders"
+        }), 500
+
+
+# --------------------------------------------------
+# Receive Telemetry
+# --------------------------------------------------
 
 @app.route("/telemetry", methods=["POST"])
 def receive_telemetry():
@@ -131,7 +191,9 @@ def receive_telemetry():
     sensor_value = data.get("sensor_value")
 
     if not device_id:
-        return jsonify({"error": "device_id is required"}), 400
+        return jsonify({
+            "error": "device_id is required"
+        }), 400
 
     try:
         with get_db_connection() as conn:
@@ -146,6 +208,7 @@ def receive_telemetry():
                     """,
                     (device_id, activity, sensor_value)
                 )
+
                 record = cur.fetchone()
 
         return jsonify({
@@ -158,8 +221,15 @@ def receive_telemetry():
 
     except psycopg.Error:
         app.logger.exception("Database error while saving telemetry")
-        return jsonify({"error": "Could not save telemetry"}), 500
 
+        return jsonify({
+            "error": "Could not save telemetry"
+        }), 500
+
+
+# --------------------------------------------------
+# Get Telemetry
+# --------------------------------------------------
 
 @app.route("/telemetry", methods=["GET"])
 def get_telemetry():
@@ -174,6 +244,7 @@ def get_telemetry():
                     ORDER BY id DESC
                     """
                 )
+
                 rows = cur.fetchall()
 
         records = [{
@@ -184,13 +255,79 @@ def get_telemetry():
             "timestamp": row["recorded_at"].isoformat()
         } for row in rows]
 
-        return jsonify(records)
+        return jsonify(records), 200
 
     except psycopg.Error:
         app.logger.exception("Database error while retrieving telemetry")
-        return jsonify({"error": "Could not retrieve telemetry"}), 500
 
+        return jsonify({
+            "error": "Could not retrieve telemetry"
+        }), 500
+
+
+# --------------------------------------------------
+# Upload File to Azure Blob Storage
+# --------------------------------------------------
+
+@app.route("/upload", methods=["POST"])
+def upload_file():
+
+    if "file" not in request.files:
+        return jsonify({
+            "error": "No file provided"
+        }), 400
+
+    file = request.files["file"]
+
+    if not file.filename:
+        return jsonify({
+            "error": "No file selected"
+        }), 400
+
+    filename = secure_filename(file.filename)
+
+    if not filename:
+        return jsonify({
+            "error": "Invalid filename"
+        }), 400
+
+    blob_name = f"{uuid.uuid4()}-{filename}"
+
+    try:
+        blob_client = blob_service_client.get_blob_client(
+            container=CONTAINER_NAME,
+            blob=blob_name
+        )
+
+        blob_client.upload_blob(
+            file,
+            overwrite=False
+        )
+
+        return jsonify({
+            "message": "File uploaded successfully",
+            "container": CONTAINER_NAME,
+            "blob_name": blob_name
+        }), 201
+
+    except Exception:
+        app.logger.exception("Blob upload failed")
+
+        return jsonify({
+            "error": "File upload failed"
+        }), 500
+
+
+# --------------------------------------------------
+# Run application locally
+# --------------------------------------------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8001))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False
+    )
+
+

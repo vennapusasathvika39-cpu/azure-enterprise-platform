@@ -3,3 +3,5 @@ gunicorn
 psycopg[binary]
 pytest
 pytest-mock
+azure-identity
+azure-storage-blob
