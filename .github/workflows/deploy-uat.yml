@@ -71,7 +71,7 @@ jobs:
           az webapp config set \
             --resource-group rg-order-uat \
             --name order-api-uat-20261127xyz \
-            --startup-file "python /home/site/wwwroot/init_db.py && gunicorn --chdir /home/site/wwwroot --bind=0.0.0.0:8000 app:app"
+            --startup-file "python init_db.py && gunicorn --bind=0.0.0.0:8000 app:app"
 
       - name: Deploy to UAT
         uses: azure/webapps-deploy@v3
