@@ -1,0 +1,17 @@
+
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    customer_name VARCHAR(150) NOT NULL,
+    product_name VARCHAR(150) NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    order_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS telemetry (
+    id SERIAL PRIMARY KEY,
+    device_id VARCHAR(100) NOT NULL,
+    activity VARCHAR(100),
+    sensor_value DOUBLE PRECISION,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
